@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quake Client для Minecraft 1.20.1 на Forge</title>
+    <link rel="stylesheet" href="login.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <a href="https://example.com" id="client-link">
+                        <img src="star_transparent.png" alt="Star Icon">
+                        <h1>Quake Client</h1>
+                    </a>
+                </div>
+                <nav>
+                    <ul>
+                        <li><a href="#about"><i class="fas fa-info-circle"></i> О DLC</a></li>
+                        <li><a href="#features"><i class="fas fa-star"></i> Особенности</a></li>
+                        <li><a href="#login" class="auth-button"><i class="fas fa-sign-in-alt"></i> Аккаунт</a></li>
+                    </ul>
+                </nav>
+                <div id="username-display" class="username-display" style="display: none;">
+                    <p id="account-username"></p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section id="auth">
+        <div class="container">
+            <div id="auth-forms">
+                <div id="login-form">
+                    <h2>Вход</h2>
+                    <input type="email" id="login-email" placeholder="Почта">
+                    <p id="email-error" class="error-message"></p>
+                    <input type="password" id="login-password" placeholder="Пароль">
+                    <p id="password-error" class="error-message"></p>
+                    <button onclick="login()">Вход</button>
+                    <button onclick="showRegisterForm()">Создать аккаунт</button>
+                    <button>Забыли пароль?</button>
+                </div>
+                <div id="register-form" style="display: none;">
+                    <h2>Регистрация</h2>
+                    <input type="email" id="register-email" placeholder="Почта">
+                    <p id="register-email-error" class="error-message"></p>
+                    <input type="text" id="register-username" placeholder="Имя пользователя">
+                    <p id="register-username-error" class="error-message"></p>
+                    <input type="password" id="register-password" placeholder="Пароль">
+                    <p id="register-password-error" class="error-message"></p>
+                    <button onclick="register()">Регистрация</button>
+                    <button onclick="showLoginForm()">Уже есть аккаунт? Вход</button>
+                </div>
+            </div>
+            <div id="welcome-message" style="display: none;">
+                <div class="left-panel">
+                    <button onclick="showAccountInfo()"><i class="fas fa-user"></i> Аккаунт</button>
+                    <button onclick="showDownloadInfo()"><i class="fas fa-download"></i> Скачать</button>
+                    <button onclick="showPurchaseInfo()"><i class="fas fa-shopping-cart"></i> Купить</button>
+                    <button onclick="showInstructions()"><i class="fas fa-info-circle"></i> Инструкция</button>
+                    <button onclick="logout()"><i class="fas fa-sign-out-alt"></i> Выход</button>
+                </div>
+                <div class="right-panel">
+                    <p id="info-text">Добро пожаловать, <span id="user-name"></span>!</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+    import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-database.js";
+    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+    import { initializeAppCheck, ReCaptchaV3Provider } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app-check.js";
+
+    if (typeof window !== "undefined") {
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "quake-client.firebaseapp.com",
+            databaseURL: "https://quake-client-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "quake-client",
+            storageBucket: "quake-client.appspot.com",
+            messagingSenderId: "313076224131",
+            appId: "1:313076224131:web:a8346f025bba1c69828bb6",
+            measurementId: "G-RP2RRPLVS3"
+        };
+
+        const app = initializeApp(firebaseConfig);
+
+        // Установите отладочный токен вручную для среды разработки
+        const isDevelopment = true; // Измените это на false для продакшн среды
+        if (isDevelopment) {
+            window.FIREBASE_APPCHECK_DEBUG_TOKEN = 'your_debug_token_here';
+        }
+
+        const appCheck = initializeAppCheck(app, {
+            provider: new ReCaptchaV3Provider('YOUR_RECAPTCHA_SITE_KEY'),
+            isTokenAutoRefreshEnabled: true
+        });
+
+        const db = getDatabase(app);
+        const auth = getAuth(app);
+
+        window.showRegisterForm = () => {
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('register-form').style.display = 'block';
+        };
+
+        window.showLoginForm = () => {
+            document.getElementById('register-form').style.display = 'none';
+            document.getElementById('login-form').style.display = 'block';
+        };
+
+        window.login = async () => {
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+
+            try {
+                const userCredential = await signInWithEmailAndPassword(auth, email, password);
+                console.log("User signed in: ", userCredential.user);
+
+                const userId = userCredential.user.uid;
+                const userRef = ref(db, 'users/' + userId);
+                const snapshot = await get(userRef);
+                if (snapshot.exists()) {
+                    const username = snapshot.val().username;
+                    console.log("Username found:", username);
+                    showWelcomeMessage(username);
+                } else {
+                    console.error("No username found!");
+                }
+            } catch (error) {
+                console.error("Error signing in: ", error);
+                if (error.code === 'auth/invalid-email') {
+                    document.getElementById('email-error').innerText = 'Некорректный email';
+                } else if (error.code === 'auth/wrong-password') {
+                    document.getElementById('password-error').innerText = 'Неверный пароль';
+                } else {
+                    document.getElementById('email-error').innerText = 'Ошибка входа';
+                }
+            }
+        };
+
+        window.register = async () => {
+            const email = document.getElementById('register-email').value;
+            const username = document.getElementById('register-username').value;
+            const password = document.getElementById('register-password').value;
+
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                console.log("User registered: ", userCredential.user);
+
+                const userId = userCredential.user.uid;
+                await set(ref(db, 'users/' + userId), {
+                    email: email,
+                    username: username,
+                    createdAt: new Date().toISOString()
+                });
+
+                console.log("User data saved successfully");
+
+                showWelcomeMessage(username);
+            } catch (error) {
+                console.error("Error registering: ", error);
+                if (error.code === 'auth/email-already-in-use') {
+                    document.getElementById('register-email-error').innerText = 'Email уже используется';
+                } else if (error.code === 'auth/invalid-email') {
+                    document.getElementById('register-email-error').innerText = 'Некорректный email';
+                } else {
+                    document.getElementById('register-email-error').innerText = 'Ошибка регистрации';
+                }
+            }
+        };
+
+        const showWelcomeMessage = (username) => {
+            console.log("Showing welcome message for:", username);
+            document.getElementById('auth-forms').style.display = 'none';
+            document.getElementById('welcome-message').style.display = 'flex';
+            document.getElementById('info-text').innerText = 'Добро пожаловать, ' + username + '!';
+            document.getElementById('user-name').innerText = username;
+
+            document.getElementById('account-username').innerText = username;
+            document.getElementById('username-display').style.display = 'block';
+        };
+
+        window.logout = () => {
+            signOut(auth).then(() => {
+                document.getElementById('welcome-message').style.display = 'none';
+                document.getElementById('auth-forms').style.display = 'block';
+                document.getElementById('username-display').style.display = 'none';
+            }).catch((error) => {
+                console.error("Error signing out: ", error);
+            });
+        };
+
+        window.showAccountInfo = () => {
+            clearRightPanel();
+            document.getElementById('info-text').innerText = 'Добро пожаловать, ' + document.getElementById('user-name').innerText + '!';
+        };
+
+        window.showDownloadInfo = () => {
+            clearRightPanel();
+            document.getElementById('info-text').innerText = 'Тест скачка';
+        };
+
+        window.showPurchaseInfo = () => {
+            clearRightPanel();
+            document.getElementById('info-text').innerText = 'Тест покупка';
+        };
+
+        window.showInstructions = () => {
+            clearRightPanel();
+            document.getElementById('info-text').innerText = 'Тест инструкция';
+        };
+
+        const clearRightPanel = () => {
+            document.getElementById('info-text').innerText = '';
+        };
+
+        window.onload = () => {
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    try {
+                        const userId = user.uid;
+                        const userRef = ref(db, 'users/' + userId);
+                        const snapshot = await get(userRef);
+                        if (snapshot.exists()) {
+                            const username = snapshot.val().username;
+                            console.log("Username found on auth state change:", username);
+                            showWelcomeMessage(username);
+                        } else {
+                            console.error("No username found on auth state change!");
+                        }
+                    } catch (error) {
+                        console.error("Error getting username on auth state change:", error);
+                    }
+                }
+            });
+        };
+    }
+</script>
+
+
+
+
+
+
+</body>
+</html>
